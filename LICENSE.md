@@ -88,46 +88,11 @@ As a mod developer, you are permitted to publish **Yapple Pro–licensed** modif
 
 # PLEASE READ CAREFULLY
 
-* Qwen 2.5 1.5b LLM is licensed under the **Apache License 2.0**
-  See `Third Party Licenses/Qwen 2.5 1.5b/LICENSE.txt` for full terms.
+* **Vosk AI Speech-to-Text (STT) models** are used in this project.  
+  Vosk is licensed under the **Apache License 2.0**.  
+
+  See the Apache License 2.0 for full terms:  
+  https://www.apache.org/licenses/LICENSE-2.0
+
 
 ---
-
-## PROJECT LICENSE
-
-AGPL & COPYRIGHTED LICENSE
-PLEASE READ CAREFULLY
-=====================
-
-### ASSETS (Audio, Visual, etc.)
-
----
-
-All assets included in this project, including but not limited to:
-
-• Audio files
-• Visual assets (images, models, textures, animations)
-• Fonts, icons, and UI elements
-
-are © 2025 **Shiny** and are strictly **COPYRIGHTED**.
-
-These assets are **NOT licensed for commercial use** in any form.
-You may **NOT** use them in commercial projects, redistribute them separately, or resell them.
-
-Personal, educational, or non-commercial use is allowed, but attribution to the original author (**“Shiny”**) is required.
-
-If you wish to license these assets for commercial use, you must contact the author directly for permission.
-
----
-
-## LLAMA 3.2 COMMUNITY LICENSE AGREEMENT
-
-*(unchanged; applies independently to Meta’s Llama materials)*
-
----
-
-If you want, I can also:
-
-* Normalize naming further (e.g. **Yapple Core / Yapple Pro**),
-* Split this into separate `LICENSE`, `ASSETS_LICENSE`, and `THIRD_PARTY_LICENSES`,
-* Or legally tighten wording for Germany / EU specifically.
