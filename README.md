@@ -9,7 +9,7 @@ You can use **four different command types**:
 
 * Soundboards
 * Windows Commands
-* VRChat OSC
+* VRChat OSC (Bools, Integers, Floats)
 * Keybinds
 
 # Resource Friendly
