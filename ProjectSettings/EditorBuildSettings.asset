@@ -5,12 +5,14 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 0
-    path: Assets/Scenes/SampleScene.unity
-    guid: 2cda990e2423bbf4892e6590ba056729
   - enabled: 1
     path: Assets/FAST.unity
     guid: 22a0a92cad07ecc438654b6a1133b386
+  - enabled: 1
+    path: Assets/FAST_VC.unity
+    guid: b7fdf52c15e474344ac379a6cfb0a025
   m_configObjects:
+    Unity.XR.OpenVR.Settings: {fileID: 11400000, guid: 670003155a174df49a6a095bd32d05f2, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 3590b91b4603b465dbb4216d601bff33, type: 3}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 2007fbd1bc987f043bc43126c669f27f, type: 2}
   m_UseUCBPForAssetBundles: 0
