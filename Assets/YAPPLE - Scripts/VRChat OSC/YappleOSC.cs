@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -36,7 +37,7 @@ public sealed class YappleOSC : MonoBehaviour
     [SerializeField] private float maxPitch = 1.2f;
 
     private readonly List<YappleOSCItem> items = new List<YappleOSCItem>();
-    private readonly Dictionary<string, List<OscBoolCommand>> wordToOsc = new Dictionary<string, List<OscBoolCommand>>(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<OscCommand>> wordToOsc = new Dictionary<string, List<OscCommand>>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> lastRunByWord = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, bool> toggleStateByParameter = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
@@ -52,11 +53,26 @@ public sealed class YappleOSC : MonoBehaviour
         Toggle
     }
 
-    private struct OscBoolCommand
+    private enum ValueKind
+    {
+        Bool,
+        Int,
+        Float
+    }
+
+    private struct OscCommand
     {
         public string Parameter;
-        public bool Value;
         public CommandMode Mode;
+        public ValueKind Kind;
+
+        public bool BoolValue;
+        public int IntValue;
+        public float FloatValue;
+
+        public bool HasRandomRange;
+        public float RandomMin;
+        public float RandomMax;
     }
 
     private void Awake()
@@ -206,7 +222,7 @@ public sealed class YappleOSC : MonoBehaviour
 
             if (!wordToOsc.TryGetValue(w, out var list))
             {
-                list = new List<OscBoolCommand>(2);
+                list = new List<OscCommand>(2);
                 wordToOsc[w] = list;
             }
 
@@ -268,21 +284,44 @@ public sealed class YappleOSC : MonoBehaviour
         }
     }
 
-    private bool ExecuteOscCommand(OscBoolCommand cmd)
+    private bool ExecuteOscCommand(OscCommand cmd)
     {
         if (string.IsNullOrWhiteSpace(cmd.Parameter))
             return false;
 
-        if (cmd.Mode == CommandMode.Toggle)
-            return ExecuteToggle(cmd.Parameter, cmd.Value);
+        if (cmd.Kind == ValueKind.Bool)
+        {
+            if (cmd.Mode == CommandMode.Toggle)
+                return ExecuteToggle(cmd.Parameter, cmd.BoolValue);
 
-        if (!SendVrchatBool(cmd.Parameter, cmd.Value))
-            return false;
+            if (!SendVrchatBool(cmd.Parameter, cmd.BoolValue))
+                return false;
 
-        if (cmd.Mode == CommandMode.Trigger)
-            StartTriggerPulse(cmd.Parameter, cmd.Value);
+            if (cmd.Mode == CommandMode.Trigger)
+                StartTriggerPulse(cmd.Parameter, cmd.BoolValue);
 
-        return true;
+            return true;
+        }
+
+        if (cmd.Kind == ValueKind.Int)
+        {
+            int v = cmd.IntValue;
+            if (cmd.HasRandomRange)
+                v = PickRandomInt(cmd.RandomMin, cmd.RandomMax);
+
+            return SendVrchatInt(cmd.Parameter, v);
+        }
+
+        if (cmd.Kind == ValueKind.Float)
+        {
+            float v = cmd.FloatValue;
+            if (cmd.HasRandomRange)
+                v = PickRandomFloat(cmd.RandomMin, cmd.RandomMax);
+
+            return SendVrchatFloat(cmd.Parameter, v);
+        }
+
+        return false;
     }
 
     private bool ExecuteToggle(string parameter, bool firstValue)
@@ -361,7 +400,85 @@ public sealed class YappleOSC : MonoBehaviour
         }
     }
 
-    private static bool TryParseOscCommand(string text, out OscBoolCommand cmd)
+    private bool SendVrchatInt(string parameterName, int value)
+    {
+        if (string.IsNullOrWhiteSpace(parameterName))
+            return false;
+
+        SetupOscTransport();
+        if (udp == null || targetEndPoint == null)
+            return false;
+
+        string address = "/avatar/parameters/" + parameterName.Trim();
+        byte[] pkt = BuildOscIntPacket(address, value);
+
+        try
+        {
+            udp.Send(pkt, pkt.Length, targetEndPoint);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool SendVrchatFloat(string parameterName, float value)
+    {
+        if (string.IsNullOrWhiteSpace(parameterName))
+            return false;
+
+        SetupOscTransport();
+        if (udp == null || targetEndPoint == null)
+            return false;
+
+        string address = "/avatar/parameters/" + parameterName.Trim();
+        byte[] pkt = BuildOscFloatPacket(address, value);
+
+        try
+        {
+            udp.Send(pkt, pkt.Length, targetEndPoint);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static int PickRandomInt(float min, float max)
+    {
+        int a = Mathf.FloorToInt(min);
+        int b = Mathf.FloorToInt(max);
+        if (a > b)
+        {
+            int t = a;
+            a = b;
+            b = t;
+        }
+
+        if (a == b)
+            return a;
+
+        if (b < int.MaxValue)
+            return UnityEngine.Random.Range(a, b + 1);
+
+        return UnityEngine.Random.Range(a, b);
+    }
+
+    private static float PickRandomFloat(float min, float max)
+    {
+        if (min > max)
+        {
+            float t = min;
+            min = max;
+            max = t;
+        }
+
+        return min + (max - min) * UnityEngine.Random.value;
+    }
+
+    private static bool TryParseOscCommand(string text, out OscCommand cmd)
     {
         cmd = default;
 
@@ -382,37 +499,206 @@ public sealed class YappleOSC : MonoBehaviour
             s = rest.Trim();
         }
 
-        int colon = s.IndexOf(':');
-        if (colon <= 0 || colon >= s.Length - 1)
+        bool hasRandom = false;
+        float ranMin = 0f;
+        float ranMax = 0f;
+
+        if (TryConsumeRandomPrefix(ref s, out ranMin, out ranMax))
+            hasRandom = true;
+
+        string[] parts = s.Split(':');
+        if (parts.Length == 2)
+        {
+            if (hasRandom)
+                return false;
+
+            string param = parts[0].Trim();
+            string val = parts[1].Trim();
+
+            if (!IsValidParamName(param))
+                return false;
+
+            if (!TryParseBool(val, out bool b))
+                return false;
+
+            cmd = new OscCommand
+            {
+                Parameter = param,
+                Kind = ValueKind.Bool,
+                BoolValue = b,
+                Mode = mode
+            };
+            return true;
+        }
+
+        if (parts.Length == 3)
+        {
+            if (mode != CommandMode.Normal)
+                return false;
+
+            string param = parts[0].Trim();
+            string type = parts[1].Trim();
+            string val = parts[2].Trim();
+
+            if (!IsValidParamName(param))
+                return false;
+
+            if (string.Equals(type, "int", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseIntLenient(val, out int iv))
+                    return false;
+
+                cmd = new OscCommand
+                {
+                    Parameter = param,
+                    Kind = ValueKind.Int,
+                    IntValue = iv,
+                    Mode = CommandMode.Normal,
+                    HasRandomRange = hasRandom,
+                    RandomMin = ranMin,
+                    RandomMax = ranMax
+                };
+                return true;
+            }
+
+            if (string.Equals(type, "float", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseFloatFlexible(val, out float fv))
+                    return false;
+
+                cmd = new OscCommand
+                {
+                    Parameter = param,
+                    Kind = ValueKind.Float,
+                    FloatValue = fv,
+                    Mode = CommandMode.Normal,
+                    HasRandomRange = hasRandom,
+                    RandomMin = ranMin,
+                    RandomMax = ranMax
+                };
+                return true;
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryConsumeRandomPrefix(ref string s, out float min, out float max)
+    {
+        min = 0f;
+        max = 0f;
+
+        if (string.IsNullOrWhiteSpace(s))
             return false;
 
-        string param = s.Substring(0, colon).Trim();
-        string val = s.Substring(colon + 1).Trim();
+        string t = s.TrimStart();
+        if (!t.StartsWith("Ran(", StringComparison.OrdinalIgnoreCase))
+            return false;
 
-        if (param.Length == 0)
+        int close = t.IndexOf(')');
+        if (close < 0)
+            return false;
+
+        string inside = t.Substring(4, close - 4);
+        int dash = inside.IndexOf('-');
+        if (dash <= 0 || dash >= inside.Length - 1)
+            return false;
+
+        string a = inside.Substring(0, dash).Trim();
+        string b = inside.Substring(dash + 1).Trim();
+
+        if (!TryParseFloatFlexible(a, out min))
+            return false;
+
+        if (!TryParseFloatFlexible(b, out max))
+            return false;
+
+        int after = close + 1;
+        if (after >= t.Length || t[after] != ':')
+            return false;
+
+        s = t.Substring(after + 1).Trim();
+        return true;
+    }
+
+    private static bool TryParseBool(string val, out bool b)
+    {
+        if (string.Equals(val, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            b = true;
+            return true;
+        }
+
+        if (string.Equals(val, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            b = false;
+            return true;
+        }
+
+        if (string.Equals(val, "1", StringComparison.OrdinalIgnoreCase))
+        {
+            b = true;
+            return true;
+        }
+
+        if (string.Equals(val, "0", StringComparison.OrdinalIgnoreCase))
+        {
+            b = false;
+            return true;
+        }
+
+        b = false;
+        return false;
+    }
+
+    private static bool TryParseIntLenient(string val, out int iv)
+    {
+        if (int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out iv))
+            return true;
+
+        if (TryParseFloatFlexible(val, out float f))
+        {
+            iv = Mathf.FloorToInt(f);
+            return true;
+        }
+
+        iv = 0;
+        return false;
+    }
+
+    private static bool TryParseFloatFlexible(string val, out float fv)
+    {
+        if (val == null)
+        {
+            fv = 0f;
+            return false;
+        }
+
+        string s = val.Trim();
+
+        if (s.EndsWith("f", StringComparison.OrdinalIgnoreCase))
+            s = s.Substring(0, s.Length - 1).Trim();
+
+        s = s.Replace(',', '.');
+
+        return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out fv);
+    }
+
+    private static bool IsValidParamName(string param)
+    {
+        if (string.IsNullOrWhiteSpace(param))
             return false;
 
         for (int i = 0; i < param.Length; i++)
         {
             char c = param[i];
-            bool ok = char.IsLetterOrDigit(c) || c == '_' || c == '-';
+            bool ok = char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '/';
             if (!ok)
                 return false;
         }
 
-        bool b;
-        if (string.Equals(val, "true", StringComparison.OrdinalIgnoreCase))
-            b = true;
-        else if (string.Equals(val, "false", StringComparison.OrdinalIgnoreCase))
-            b = false;
-        else if (string.Equals(val, "1", StringComparison.OrdinalIgnoreCase))
-            b = true;
-        else if (string.Equals(val, "0", StringComparison.OrdinalIgnoreCase))
-            b = false;
-        else
-            return false;
-
-        cmd = new OscBoolCommand { Parameter = param, Value = b, Mode = mode };
         return true;
     }
 
@@ -434,6 +720,40 @@ public sealed class YappleOSC : MonoBehaviour
         WritePaddedOscString(bytes, address);
         WritePaddedOscString(bytes, value ? ",T" : ",F");
         return bytes.ToArray();
+    }
+
+    private static byte[] BuildOscIntPacket(string address, int value)
+    {
+        var bytes = new List<byte>(128);
+        WritePaddedOscString(bytes, address);
+        WritePaddedOscString(bytes, ",i");
+        WriteOscInt32(bytes, value);
+        return bytes.ToArray();
+    }
+
+    private static byte[] BuildOscFloatPacket(string address, float value)
+    {
+        var bytes = new List<byte>(128);
+        WritePaddedOscString(bytes, address);
+        WritePaddedOscString(bytes, ",f");
+        WriteOscFloat32(bytes, value);
+        return bytes.ToArray();
+    }
+
+    private static void WriteOscInt32(List<byte> dst, int value)
+    {
+        byte[] raw = BitConverter.GetBytes(value);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(raw);
+        dst.AddRange(raw);
+    }
+
+    private static void WriteOscFloat32(List<byte> dst, float value)
+    {
+        byte[] raw = BitConverter.GetBytes(value);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(raw);
+        dst.AddRange(raw);
     }
 
     private static void WritePaddedOscString(List<byte> dst, string s)
