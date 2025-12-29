@@ -9,7 +9,7 @@ You can use **four different command types**:
 
 * Soundboards
 * Windows Commands
-* VRChat OSC
+* VRChat OSC (Bools, Integers, Floats)
 * Keybinds
 
 # Resource Friendly
@@ -83,7 +83,7 @@ Avoid dangerous or destructive commands that could be accidentally triggered by 
 
 With **VRC OSC**, you can control **Bool parameters** on your VRChat avatar’s Animator.
 
-**Example:**
+**Example:(Bools)**
 
 * Trigger: **“Do A Dance”**
 * Parameter:
@@ -127,6 +127,43 @@ trigger:UseWeapon:true
 Sets the parameter to `true` for **~1–1.5 seconds**, then automatically resets it to `false`.
 
 This is required for **VRChat Contacts**, which trigger local bools after ~0.75–1.5 seconds.
+
+**Example (Floats / Integers)**
+
+You can use both **Integers** and **Floats** as values.
+
+**Floats**
+
+```
+ParameterName:float:Number
+VRCEmote:float:1
+```
+
+**Integers**
+
+```
+ParameterName:int:Number
+VRCEmote:int:1
+```
+
+---
+
+### Random Prefix
+
+You can optionally add a **Random** prefix using the following syntax:
+
+```
+ran(min-max)
+```
+
+**Example with a float**
+
+```
+ran(0-10):VRCEmote:float:0
+```
+
+This executes the `VRCEmote` float parameter and assigns it a random value between **0** and **10**.
+
 
 ---
 
