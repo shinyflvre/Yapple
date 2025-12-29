@@ -12,6 +12,10 @@ You can use **four different command types**:
 * VRChat OSC
 * Keybinds
 
+# Resource Friendly
+<img width="576" height="120" alt="image" src="https://github.com/user-attachments/assets/5031c405-3e2e-4aff-b396-524bd914ad1a" />
+
+
 ---
 
 ## 1. Soundboards
